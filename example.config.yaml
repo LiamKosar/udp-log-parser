@@ -1,0 +1,42 @@
+network: 
+  port: 8125
+  datagram_max_size: 65535
+
+log_schemas:
+  normal_log:
+    log_shortcut: l
+    pg_url_env_variable_name: LOG_DAEMON_POSTGRESQL_URL
+    pg_table_name: normal_logs
+    num_workers: 1
+    batch_size: 5
+    batch_timeout: 15
+    delimiter: ':'
+
+    parameter_schemas:
+      - name: name
+        type: str
+      
+      - name: value
+        type: int
+
+      - name: timestamp
+        type: float
+
+  transaction_log:
+    log_shortcut: t
+    pg_url_env_variable_name: LOG_DAEMON_POSTGRESQL_URL
+    pg_table_name: transaction_logs
+    num_workers: 1
+    batch_size: 5
+    batch_timeout: 15
+    delimiter: ':'
+
+    parameter_schemas:
+      - name: f1
+        type: float
+      
+      - name: s1
+        type: str
+
+      - name: s2
+        type: str
