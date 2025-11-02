@@ -135,9 +135,7 @@ def log_pusher(log_schema: LogSchema, log_queue: Queue[tuple], worker_num: int):
                 batch = []
                 last_batch_flush = time.time()
 
-
 def inject_connection_with_retries(retries: int = 3):
-    """A decorator factory that takes a parameter."""
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
