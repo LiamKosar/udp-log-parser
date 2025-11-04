@@ -151,7 +151,7 @@ def inject_connection_with_retries(retries: int = 3):
                     conn_manager.conn = None
                     time.sleep(random.uniform(.5, 3))
             
-            logging.info('Dropped some shii')
+            logging.info('Dropped logs')
 
         return wrapper
     return decorator
