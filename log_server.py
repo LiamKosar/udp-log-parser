@@ -3,9 +3,9 @@ import socket
 import os
 from datetime import datetime
 import time
-from multiprocessing import Process, Manager
+from multiprocessing import Process, Queue
 import logging
-from queue import Queue, Empty
+from queue import Empty
 from contextlib import contextmanager
 import psycopg2
 from functools import wraps
@@ -53,27 +53,27 @@ class PGConnection(object):
         self.conn.commit()
 
 def start_log_daemon(lds: LogDaemonSettings):
-    with Manager() as manager:
-        log_shortcut_to_queue_map: Dict[str, Queue[tuple]] = {}
-        for log_schema in lds.log_schema_list:
-            log_shortcut_to_queue_map[log_schema.log_shortcut] = manager.Queue()
+    # with Manager() as manager:
+    log_shortcut_to_queue_map: Dict[str, Queue[tuple]] = {}
+    for log_schema in lds.log_schema_list:
+        log_shortcut_to_queue_map[log_schema.log_shortcut] = Queue()
 
-        processes = []
-        log_parser_process = Process(target=log_parser, args=(lds, log_shortcut_to_queue_map, ))
-        processes.append(log_parser_process)
+    processes = []
+    log_parser_process = Process(target=log_parser, args=(lds, log_shortcut_to_queue_map, ))
+    processes.append(log_parser_process)
 
-        for log_shortcut in log_shortcut_to_queue_map.keys():
-            log_schema: LogSchema = lds.shortcut_to_log_schema_map[log_shortcut]
-            log_queue: Queue[tuple] = log_shortcut_to_queue_map[log_shortcut]
+    for log_shortcut in log_shortcut_to_queue_map.keys():
+        log_schema: LogSchema = lds.shortcut_to_log_schema_map[log_shortcut]
+        log_queue: Queue[tuple] = log_shortcut_to_queue_map[log_shortcut]
 
-            for i in range(log_schema.num_workers):
-                processes.append(Process(target=log_pusher, args=(log_schema, log_queue, i,)))
+        for i in range(log_schema.num_workers):
+            processes.append(Process(target=log_pusher, args=(log_schema, log_queue, i,)))
 
-        for process in processes:
-            process.start()
+    for process in processes:
+        process.start()
 
-        for process in processes:
-            process.join()
+    for process in processes:
+        process.join()
 
 def log_parser(lds: LogDaemonSettings, log_shortcut_to_queue_map: Dict[str, Queue]):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
