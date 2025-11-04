@@ -119,7 +119,7 @@ def log_pusher(log_schema: LogSchema, log_queue: Queue[tuple], worker_num: int):
 
     while True:
         try:   
-            item = log_queue.get(timeout=0.1)
+            item = log_queue.get(timeout=log_schema.batch_timeout)
             batch.append(item)
             
             # Check if we should flush the batch
