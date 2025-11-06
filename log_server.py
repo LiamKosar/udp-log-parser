@@ -53,7 +53,6 @@ class PGConnection(object):
         self.conn.commit()
 
 def start_log_daemon(lds: LogDaemonSettings):
-    # with Manager() as manager:
     log_shortcut_to_queue_map: Dict[str, Queue[tuple]] = {}
     for log_schema in lds.log_schema_list:
         log_shortcut_to_queue_map[log_schema.log_shortcut] = Queue()
@@ -90,7 +89,10 @@ def log_parser(lds: LogDaemonSettings, log_shortcut_to_queue_map: Dict[str, Queu
 
         parameters = log.split(log_schema.delimiter)
         parameter_schemas: list[ParameterSchema] = log_schema.parameter_schema_list
-        assert len(parameters) == len(parameter_schemas)
+
+        # drop log if doesn't match schema
+        if len(parameters) != len(parameter_schemas):
+            continue
 
         all_parameters_converted = True
         for i in range(len(parameters)):
@@ -100,7 +102,8 @@ def log_parser(lds: LogDaemonSettings, log_shortcut_to_queue_map: Dict[str, Queu
             except DecodingException:
                 all_parameters_converted = False
                 break
-
+        
+        # drop log if doesn't match schema
         if not all_parameters_converted:
             continue     
 
@@ -119,10 +122,12 @@ def log_pusher(log_schema: LogSchema, log_queue: Queue[tuple], worker_num: int):
 
     while True:
         try:   
-            item = log_queue.get(timeout=log_schema.batch_timeout)
+            
+            # weird calc, basically block until the next timeout. Greatly reduces cpu load
+            item = log_queue.get(timeout=log_schema.batch_timeout - (time.time()-last_batch_flush))
             batch.append(item)
             
-            # Check if we should flush the batch
+            # Check if we should flush the batch 
             if len(batch) >= batch_size or (time.time() - last_batch_flush) > batch_timeout:
                 if batch:
                     process_batch(log_schema, batch)
@@ -198,16 +203,24 @@ class LogDaemonSettings:
             self.shortcut_to_log_schema_map[log_schema.log_shortcut] = log_schema
 
 class LogSchema:
-    log_shortcut: str
-    pg_url_env_variable_name: str
+    """
+    Structure of a specific log type.
+    Logs can be denoted as this in utf-8:
+    'log_shortcut#<parameter_1><delimiter><parameter_2><delimiter><parameter_n>'
+    """
+
+    log_shortcut: str # log prefix, will be used to route the parser to the correct schema
+    pg_url_env_variable_name: str # the name of the environment variable storing pg url
     pg_table_name: str
-    num_workers: str
-    batch_size: int
-    batch_timeout: int
-    delimiter: str
+    num_workers: str # number of workers pushing logs to pg
+    batch_size: int # how many logs get pushed with each query
+    batch_timeout: int # overrides batch size in case of minimal log throughput
+    delimiter: str # separates parameters within a log string 
     parameter_schema_list: list[ParameterSchema]
-    parameter_insert_string: str
-    parameter_placeholder_str: str
+
+    # these are generated strings, storing them to make queries faster
+    parameter_insert_string: str # ex: 'parameter_1, parameter_2, ..., parameter_n'
+    parameter_placeholder_str: str # ex: '%s, %s, ..., %s'
 
     def __init__(self, log_schema: Dict[str, any]):
         self.log_shortcut = log_schema['log_shortcut']
@@ -238,7 +251,6 @@ class ParameterSchema:
     type: str
 
     def __init__(self, parameter_schema: Dict[str, any]):
-        
         if LogDaemonSettings.TYPE_CONVERTERS.get(parameter_schema['type']):
             self.name = parameter_schema['name']
             self.type = parameter_schema['type']
@@ -246,9 +258,10 @@ class ParameterSchema:
             raise ValueError(f"Parameter type {parameter_schema['type']} has not been implemented")
         
     def decode(self, parameter: str):
+        """ Try to cast the parameter to its type """
         converter = LogDaemonSettings.TYPE_CONVERTERS[self.type]
         try:
-            return converter(parameter)
+            return converter(parameter) 
 
         except (ValueError, TypeError) as e:
             logging.error(f"Error converting {parameter=}: {e}")
