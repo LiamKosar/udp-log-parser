@@ -12,6 +12,8 @@ from functools import wraps
 import random
 import yaml
 from typing import Dict
+import signal
+import sys
 
 
 # makes a log that looks like this:
@@ -74,6 +76,29 @@ def start_log_daemon(lds: LogDaemonSettings):
     for process in processes:
         process.join()
 
+        # Set up signal handler in the parent process
+    def signal_handler(signum, frame):
+        logging.info("Shutdown signal received, stopping all processes...")
+        
+        # Give processes a chance to shutdown gracefully
+        for p in processes:
+            p.join(timeout=5)
+        
+        # Force terminate any remaining processes
+        for p in processes:
+            if p.is_alive():
+                logging.warning(f"Force terminating process {p.pid}")
+                p.terminate()
+                p.join(timeout=1)
+                if p.is_alive():
+                    p.kill()
+        
+        logging.info("All processes stopped")
+        sys.exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
 def log_parser(lds: LogDaemonSettings, log_shortcut_to_queue_map: Dict[str, Queue]):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(("", lds.port))
@@ -123,8 +148,7 @@ def log_pusher(log_schema: LogSchema, log_queue: Queue[tuple], worker_num: int):
     while True:
         try:   
             
-            # weird calc, basically block until the next timeout. Greatly reduces cpu load
-            item = log_queue.get(timeout=log_schema.batch_timeout - (time.time()-last_batch_flush))
+            item = log_queue.get(timeout=log_schema.batch_timeout)
             batch.append(item)
             
             # Check if we should flush the batch 
