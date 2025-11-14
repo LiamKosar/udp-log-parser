@@ -15,7 +15,6 @@ from typing import Dict
 import signal
 import sys
 
-
 # makes a log that looks like this:
 # 2025-10-31 14:11:25 - INFO - worker 1 is processing 5 items
 logging.basicConfig(

@@ -1,0 +1,6 @@
+Make the logs independent of actions - keep it so i can 'parse' the log based on the schema, but I don't need to force people to use postgres. 
+instead, we can make an interface with a 'commit' method that pairs alongside the schema for 'any' outcome
+
+Also thinking i just completely separate parsing from pushing. Maybe we parse the tuples out of the logs then push those tuples
+into a designated redis queue for redundancy + any sort of downstream consumer. A redis q is also more observable, we track things like queue size
+and stuff. We can also add backups. There's also no risk of overloading the memory on the machine the local udp log parser is running on. 
