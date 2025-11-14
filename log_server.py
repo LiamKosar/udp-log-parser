@@ -70,13 +70,8 @@ def start_log_daemon(lds: LogDaemonSettings):
         for i in range(log_schema.num_workers):
             processes.append(Process(target=log_pusher, args=(log_schema, log_queue, i,)))
 
-    for process in processes:
-        process.start()
 
-    for process in processes:
-        process.join()
-
-        # Set up signal handler in the parent process
+    # Set up signal handler in the parent process
     def signal_handler(signum, frame):
         logging.info("Shutdown signal received, stopping all processes...")
         
@@ -98,6 +93,14 @@ def start_log_daemon(lds: LogDaemonSettings):
     
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
+
+    for process in processes:
+        process.start()
+
+    for process in processes:
+        process.join()
+
+
 
 def log_parser(lds: LogDaemonSettings, log_shortcut_to_queue_map: Dict[str, Queue]):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -190,7 +193,6 @@ def process_batch(log_schema: LogSchema, batch: list[tuple], **kwargs):
     conn = kwargs['conn']
 
     with conn.cursor() as cursor:
-
         cursor.executemany(
             f"INSERT INTO {log_schema.pg_table_name} ({log_schema.parameter_insert_string}) VALUES ({log_schema.parameter_placeholder_str})",
             batch
